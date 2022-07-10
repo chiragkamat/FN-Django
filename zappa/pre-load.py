@@ -24,6 +24,11 @@ except ImportError as e:  # pragma: no cover
     from .utilities import merge_headers
     from .wsgi import common_log, create_wsgi_request
 
+try:
+    from oci_setting import OCISetting
+except ImportError:
+    from .oci_setting import OCISetting
+
 
 # Set up logging
 logging.basicConfig()
@@ -48,19 +53,19 @@ class FNHandle:
     wsgi_app = None
     trailing_slash = False
 
-    def __new__(cls, settings_name="zappa_settings", session=None):
+    def __new__(cls, settings_name="oci_settings", session=None):
         """Singleton instance to avoid repeat setup"""
         if FNHandle.__instance is None:
             print("Instancing..")
             FNHandle.__instance = object.__new__(cls)
         return FNHandle.__instance
 
-    def __init__(self, settings_name="zappa_settings", session=None):
+    def __init__(self, settings_name="oci_settings", session=None):
 
         # We haven't cached our settings yet, load the settings and app.
         if not self.settings:
             # Loading settings from a python module
-            self.settings = importlib.import_module(settings_name)
+            self.settings = OCISetting()
             self.settings_name = settings_name
             self.session = session
 
@@ -69,7 +74,6 @@ class FNHandle:
                 level = logging.getLevelName(self.settings.LOG_LEVEL)
                 logger.setLevel(level)
 
-            remote_env = getattr(self.settings, "REMOTE_ENV", None)
             # Let the system know that this will be a Lambda/Zappa/Stack
             os.environ["SERVERTYPE"] = "OCI fn"
             os.environ["FRAMEWORK"] = "OCI FN"
@@ -171,65 +175,6 @@ class FNHandle:
                 print(cex)
         return exception_processed
 
-    @staticmethod
-    def run_function(app_function, event, context):
-        """
-        Given a function and event context,
-        detect signature and execute, returning any result.
-        """
-        # getargspec does not support python 3 method with type hints
-        # Related issue: https://github.com/Miserlou/Zappa/issues/1452
-        if hasattr(inspect, "getfullargspec"):  # Python 3
-            args, varargs, keywords, defaults, _, _, _ = inspect.getfullargspec(
-                app_function
-            )
-        else:  # Python 2
-            args, varargs, keywords, defaults = inspect.getargspec(app_function)
-        num_args = len(args)
-        if num_args == 0:
-            result = app_function(event, context) if varargs else app_function()
-        elif num_args == 1:
-            result = app_function(event, context) if varargs else app_function(event)
-        elif num_args == 2:
-            result = app_function(event, context)
-        else:
-            raise RuntimeError(
-                "Function signature is invalid. Expected a function that accepts at most "
-                "2 arguments or varargs."
-            )
-        return result
-
-    def get_function_for_aws_event(self, record):
-        """
-        Get the associated function to execute for a triggered AWS event
-
-        Support S3, SNS, DynamoDB, kinesis and SQS events
-        """
-        if "s3" in record:
-            if ":" in record["s3"]["configurationId"]:
-                return record["s3"]["configurationId"].split(":")[-1]
-
-        arn = None
-        if "Sns" in record:
-            try:
-                message = json.loads(record["Sns"]["Message"])
-                if message.get("command"):
-                    return message["command"]
-            except ValueError:
-                pass
-            arn = record["Sns"].get("TopicArn")
-        elif "dynamodb" in record or "kinesis" in record:
-            arn = record.get("eventSourceARN")
-        elif "eventSource" in record and record.get("eventSource") == "aws:sqs":
-            arn = record.get("eventSourceARN")
-        elif "s3" in record:
-            arn = record["s3"]["bucket"]["arn"]
-
-        if arn:
-            return self.settings.AWS_EVENT_MAPPING.get(arn)
-
-        return None
-
     def handler(self, event, context):
         """
         An AWS Lambda function which parses specific API Gateway input into a
@@ -293,8 +238,8 @@ class FNHandle:
                 # We are always on https on Lambda, so tell our wsgi app that.
                 environ["HTTPS"] = "on"
                 environ["wsgi.url_scheme"] = "https"
-                environ["lambda.context"] = context
-                environ["lambda.event"] = event
+                environ["fn.context"] = context
+                environ["fn.event"] = event
 
                 # Execute the application
                 with Response.from_app(self.wsgi_app, environ) as response:

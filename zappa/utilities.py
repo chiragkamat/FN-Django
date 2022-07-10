@@ -1,15 +1,19 @@
 import calendar
 import datetime
 import fnmatch
+import hashlib
 import io
 import json
 import logging
 import os
+import random
 import re
 import shutil
 import stat
 import sys
+import time
 from urllib.parse import urlparse
+import uuid
 
 import botocore
 import durationpy
@@ -630,50 +634,38 @@ def merge_headers(event):
     return multi_headers
 
 
+def get_random_string(lenth=128):
+    return str(str(time.time()) + ''.join(random.choice(
+        '0123456789AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz') for i
+                                          in range(lenth)))
+
 def context_to_event(ctx, json):
     return {
         "resource": "/{proxy+}",
-        "path": "/action/invoke",
+        "path": ctx.RequestURL(),
         'httpMethod' : ctx.Method(),
         'headers' : ctx.Headers(),
         "multiValueHeaders":{},
         "queryStringParameters":"",
         "multiValueQueryStringParameters":"",
         "pathParameters":{
-             "proxy": "action/invoke"
+             "proxy": ctx.RequestURL()
         },
         'stageVariables': None,
         "requestContext": {
             "resourceId": ctx.AppID(),
             "resourcePath": "/{proxy+}",
             "httpMethod": ctx.Method(),
-            "extendedRequestId": "Uh348GgfPHcFxdw=",
-            "requestTime": "30/Jun/2022:09:29:41 +0000",
-            "path": "/gateway/action/invoke",
-            "accountId": "761525537899",
+            "path": ctx.RequestURL(),
             "protocol": "HTTP/1.1",
             "stage": "gateway",
             "domainPrefix": None,
-            "requestTimeEpoch": None,
-            "requestId": "17616e96-fe5a-45e8-b730-6bf45dbc8b34",
-            "identity": {
-                "cognitoIdentityPoolId": None,
-                "accountId": None,
-                "cognitoIdentityId": None,
-                "caller": None,
-                "sourceIp": "199.7.200.10",
-                "principalOrgId": None,
-                "accessKey": None,
-                "cognitoAuthenticationType": None,
-                "cognitoAuthenticationProvider": None,
-                "userArn": None,
-                "userAgent": "Apache-HttpClient/4.5.13 (Java/1.8.0_321)",
-                "user": None
-            },
-            "domainName": "p2dm5pjn82.execute-api.us-west-2.amazonaws.com",
-            "apiId": "p2dm5pjn82"
+            "requestTimeEpoch": time.time(),
+            "requestId": str(uuid.uuid5(uuid.NAMESPACE_DNS,
+                              str(hashlib.sha256(f"{get_random_string()}{str(time.time())}").hexdigest()))),
+            
         },
-        "body": "eyJpbnN0YW5jZUNvbnRleHQiOnsiYXBwSWQiOiI5NjVmOTYzMy1kOGNiLTRlMzAtOTk4MS1hMGQ4NjYxZTY5YzYiLCJhcHBWZXJzaW9uIjpudWxsLCJpbnN0YWxsSWQiOiI0MzY2YWMxMC05ODcyLTQ1ZGEtOTZiNC1hMDEzZmYyZDFlNzUiLCJpbnN0YW5jZUlkIjoiNTkwMmU4NDktNjExZi00MTQ1LTk1OTYtOTIxZjFhOTM0ZWJhIiwic2VydmljZUlkIjoiYzY0MmRmMmEtZmVhOC00YWU4LTk2NmUtOGMwMzgwNzExZWNlIiwidGVuYW50SWQiOiI4MTAyMSIsInByb2R1Y3RJZCI6IjY3OThlNTIyLWRlYjUtNDg4Zi1iZjIyLWMyOWUxMzI1NGI4ZiIsIm1heFB1c2hCYXRjaFNpemUiOjIwMDAwLCJzZWNyZXQiOiJmOTc4YTExZC0xOTMzLTQxODctOWZkOS0zNTNkYTcyZmExNTEtM2U0ZWUwMGUtNjdjZS00MjhhLWJiYzctNWUzOWQ5OTA0OTMzIiwicmVjb3JkRGVmaW5pdGlvbiI6eyJpbnB1dFBhcmFtZXRlcnMiOlt7Im5hbWUiOiJhcHBjbG91ZF9yb3dfY29ycmVsYXRpb25faWQiLCJkYXRhVHlwZSI6IlRleHQiLCJ3aWR0aCI6bnVsbCwidW5pcXVlIjp0cnVlLCJyZXF1aXJlZCI6dHJ1ZSwicmVhZE9ubHkiOm51bGwsIm1pbmltdW1WYWx1ZSI6bnVsbCwibWF4aW11bVZhbHVlIjpudWxsLCJwb3NzaWJsZVZhbHVlcyI6bnVsbCwiZm9ybWF0IjpudWxsLCJyZXNvdXJjZXMiOm51bGx9LHsibmFtZSI6Ik1PQklMRV9OVU1CRVJfIiwiZGF0YVR5cGUiOiJUZXh0Iiwid2lkdGgiOjUwLCJ1bmlxdWUiOm51bGwsInJlcXVpcmVkIjpudWxsLCJyZWFkT25seSI6dHJ1ZSwibWluaW11bVZhbHVlIjpudWxsLCJtYXhpbXVtVmFsdWUiOm51bGwsInBvc3NpYmxlVmFsdWVzIjpudWxsLCJmb3JtYXQiOm51bGwsInJlc291cmNlcyI6bnVsbH0seyJuYW1lIjoiUklJRF8iLCJkYXRhVHlwZSI6IlRleHQiLCJ3aWR0aCI6MCwidW5pcXVlIjpudWxsLCJyZXF1aXJlZCI6bnVsbCwicmVhZE9ubHkiOnRydWUsIm1pbmltdW1WYWx1ZSI6bnVsbCwibWF4aW11bVZhbHVlIjpudWxsLCJwb3NzaWJsZVZhbHVlcyI6bnVsbCwiZm9ybWF0IjpudWxsLCJyZXNvdXJjZXMiOm51bGx9XSwib3V0cHV0UGFyYW1ldGVycyI6W3sibmFtZSI6ImFwcGNsb3VkX3Jvd19jb3JyZWxhdGlvbl9pZCIsImRhdGFUeXBlIjoiVGV4dCIsIndpZHRoIjpudWxsLCJ1bmlxdWUiOnRydWUsInJlcXVpcmVkIjp0cnVlLCJyZWFkT25seSI6bnVsbCwibWluaW11bVZhbHVlIjpudWxsLCJtYXhpbXVtVmFsdWUiOm51bGwsInBvc3NpYmxlVmFsdWVzIjpudWxsLCJmb3JtYXQiOm51bGwsInJlc291cmNlcyI6bnVsbH0seyJuYW1lIjoiYXBwY2xvdWRfcm93X3N0YXR1cyIsImRhdGFUeXBlIjoiVGV4dCIsIndpZHRoIjoxMCwidW5pcXVlIjpudWxsLCJyZXF1aXJlZCI6dHJ1ZSwicmVhZE9ubHkiOm51bGwsIm1pbmltdW1WYWx1ZSI6bnVsbCwibWF4aW11bVZhbHVlIjpudWxsLCJwb3NzaWJsZVZhbHVlcyI6WyJzdWNjZXNzIiwid2FybmluZyIsImZhaWx1cmUiXSwiZm9ybWF0IjpudWxsLCJyZXNvdXJjZXMiOm51bGx9LHsibmFtZSI6ImFwcGNsb3VkX3Jvd19lcnJvcm1lc3NhZ2UiLCJkYXRhVHlwZSI6IlRleHQiLCJ3aWR0aCI6NTEyMCwidW5pcXVlIjpudWxsLCJyZXF1aXJlZCI6bnVsbCwicmVhZE9ubHkiOm51bGwsIm1pbmltdW1WYWx1ZSI6bnVsbCwibWF4aW11bVZhbHVlIjpudWxsLCJwb3NzaWJsZVZhbHVlcyI6bnVsbCwiZm9ybWF0IjpudWxsLCJyZXNvdXJjZXMiOm51bGx9XX0sIm1heEJhdGNoU2l6ZSI6MjAwMDB9LCJkYXRhU2V0Ijp7ImlkIjoiMzAzOTJkNDQtMjVhOS00YjUwLWFhOGItNzYwMGE4ZWI1YWQ2Iiwicm93cyI6bnVsbCwic2l6ZSI6NTAwMDAwMH0sInByb2R1Y3RFeHBvcnRFbmRwb2ludCI6eyJ1cmwiOiJodHRwczovL2FwaTUtMDE3LnJlc3BvbnN5cy5uZXQvcmVzdC9hcHBjbG91ZC92MS90ZW5hbnRzLzgxMDIxL2RhdGFzZXRzLzMwMzkyZDQ0LTI1YTktNGI1MC1hYThiLTc2MDBhOGViNWFkNi0yMDIyMDcwMS0xMzQ5MDUiLCJtZXRob2QiOiJHRVQiLCJoZWFkZXJzIjp7fX0sInByb2R1Y3RJbXBvcnRFbmRwb2ludCI6eyJ1cmwiOiJodHRwczovL2FwaTUtMDE3LnJlc3BvbnN5cy5uZXQvcmVzdC9hcHBjbG91ZC92MS90ZW5hbnRzLzgxMDIxL2RhdGFzZXRzLzMwMzkyZDQ0LTI1YTktNGI1MC1hYThiLTc2MDBhOGViNWFkNi0yMDIyMDcwMS0xMzQ5MDUiLCJtZXRob2QiOiJQT1NUIiwiaGVhZGVycyI6e319LCJvbkNvbXBsZXRpb25DYWxsYmFja0VuZHBvaW50Ijp7InVybCI6Imh0dHBzOi8vYXBpNS0wMTcucmVzcG9uc3lzLm5ldC9yZXN0L2FwcGNsb3VkL3YxL3RlbmFudHMvODEwMjEvZXhlY3V0aW9ucy8zMDM5MmQ0NC0yNWE5LTRiNTAtYWE4Yi03NjAwYThlYjVhZDYtMjAyMjA3MDEtMTM0OTA1IiwibWV0aG9kIjoiUEFUQ0giLCJoZWFkZXJzIjp7fX0sIm1heFB1bGxQYWdlU2l6ZSI6MTAwMDAsIm1heFB1c2hCYXRjaFNpemUiOjEwMDAwfQ==",
-        "isBase64Encoded": True
+        "body": json,
+        "isBase64Encoded": False
     }
 
